@@ -50,6 +50,32 @@ inv('NFD input == NFC input', conv(smp.normalize('NFD')) === once);
 inv('tokens ⊂ text', R.tokens.every((t) => once.includes(t.out)));
 const s6 = polytonize('ο δάσκαλος μου', lexicon);
 inv('tokens ⊂ text (ἔγκλιση)', s6.tokens.every((t) => s6.text.includes(t.out)));
+
+// Ὅλοι οἱ NFC-σταθεροὶ προσυντεθειμένοι ἑλληνικοὶ χαρακτῆρες πάνω στὶς 8 βάσεις καὶ τὶς
+// 7 μάρκες: ἡ κεφαλαιοποίηση δὲν ἐπιτρέπεται νὰ προσθέσει/ἀφαιρέσει γράμμα ἢ μάρκα.
+// Παράγεται ἀπὸ τοὺς πίνακες τοῦ runtime — κανένα ξένο fixture.
+const SWEEP_BASES = 'αεηιουωρΑΕΗΙΟΥΩΡ';
+const SWEEP_MARKS = new Set(['̓', '̔', '̈', '́', '̀', '͂', 'ͅ']);
+const bare = (s) => [...s.normalize('NFD')].filter((c) => !/\p{M}/u.test(c)).length;
+const mset = (s) => [...s.normalize('NFD')].filter((c) => /\p{M}/u.test(c)).sort().join('');
+let swept = 0, sweepBad = 0;
+for (const [lo, hi] of [[0x0370, 0x03FF], [0x1F00, 0x1FFF]]) {
+  for (let cp = lo; cp <= hi; cp++) {
+    const ch = String.fromCodePoint(cp);
+    if (ch.normalize('NFC') !== ch) continue;
+    const d = [...ch.normalize('NFD')];
+    if (d.length < 2 || !SWEEP_BASES.includes(d[0]) || !d.slice(1).every((m) => SWEEP_MARKS.has(m))) continue;
+    swept++;
+    const val = ch + 'βαβα'; // 3 συστάδες: τὸ post-pass βαρείας τὸ προσπερνᾶ
+    const out = polytonize('Αβαβα', { 'αβαβα': val }).text;
+    if (bare(out) !== 5 || mset(out) !== mset(val)) {
+      sweepBad++;
+      if (sweepBad <= 3) console.log(`FAIL sweep: ${ch} -> ${out}`);
+    }
+  }
+}
+inv(`reverse sweep (${swept} χαρακτῆρες)`, sweepBad === 0);
+
 inv('χωρὶς legacy oxia στὴν ἔξοδο',
   !/[άέήίόύώΆΈΉΐΊΰΎΌΏ]/.test(once));
 
