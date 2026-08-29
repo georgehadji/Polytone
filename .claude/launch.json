@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "polytone-web",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["-y", "http-server", "web", "-p", "8321"],
+      "port": 8321
+    }
+  ]
+}
