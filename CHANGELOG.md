@@ -17,19 +17,58 @@ upgrade — are **not** breaking changes and land in minor releases.
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-08-29
+
 ### Added
 - `LICENSE` (GPL-3.0 full text) and `dict/LICENSE.txt` (upstream dictionary license, verbatim)
 - `CONTRIBUTING.md`, `CHANGELOG.md`
+- `convertDocxXml(xml, lexicon)` and `DOCX_PARTS` exported from `engine.mjs`: the `.docx`
+  text codec that `cli.mjs` and `web/index.html` both now call, replacing two independent
+  copies
+- `word/comments.xml` (Word review comments) is now included in `.docx` conversion
+- Licence notices in `web/`: `web/LICENSE.txt`, `web/dict-LICENSE.txt`, and a header banner
+  in the generated `web/lexicon.js` / `web/engine.browser.js`
+- `npm run build:web` — regenerates only the browser bundle, without the multi-minute
+  lexicon rebuild
 
 ### Changed
 - `README.md` rewritten for production use: measured performance figures, corrected
   library API example, explicit licensing/redistribution guidance
+- Word-initial upsilon (υ/Υ) now takes rough breathing (δασεία) instead of smooth breathing
+  (ψιλή) when guessed — every Greek grammar gives υ- rough breathing; ~99.4% of upsilon-initial
+  entries in `dict/el-polyton.dic` already agree. Diphthongs (αυ-, ευ-, ου-) are unaffected and
+  keep smooth breathing. This is an accuracy change, not a breaking one (see the SemVer note
+  above).
+- `web/index.html`: output-pane font stack leads with a face that actually covers Extended
+  Greek (was `Georgia`, which is missing every polytonic glyph tested); token highlighting is
+  now a single regex pass instead of one compiled pattern per distinct flagged word
 
 ### Fixed
 - `polytonize()` was O(n²) on long documents: the βαρεία post-pass re-joined the entire
   remaining document per `γιατί` occurrence, and looked up each word's report entry with a
   linear `.find()`. 24k words dropped from ~20 s to ~3 s; throughput is now flat regardless
   of document size instead of degrading with it.
+- Capitalising a word whose polytonic form has ὑπογεγραμμένη (iota subscript) inserted a
+  spurious capital iota — `.toUpperCase()` on a precomposed NFC character can expand it
+  (`ᾳ` → `ΑΙ`). Affects every dictionary pick with an ὑπογεγραμμένη candidate. **Documents
+  already converted by 1.0.0 keep the inserted letter — re-running Polytone does not repair
+  them**, because the output already carries a polytonic mark and is `skipped`.
+- `.docx` conversion corrupted named-entity text on every pass: the old codec unescaped only
+  `&amp;`/`&lt;`/`&gt;` but re-escaped every `&`, so `&quot;` became `&amp;quot;` and further
+  corrupted on each subsequent conversion.
+- `.docx` conversion could emit an illegal XML character (e.g. from a crafted numeric
+  character reference), producing a `document.xml` that Word refuses to open.
+- `tokens[].out` could disagree with the returned `text` after the ἔγκλιση τόνου (enclisis)
+  rule rewrote a preceding token.
+- Lexicon lookup walked the prototype chain (`lexicon[word] ?? lexicon[lower]`), so a
+  polluted `Object.prototype` could shadow a real lookup. Matters most in the browser, where
+  the lexicon and third-party scripts share a global object.
+- Browser `.docx` handling had no error handling: a corrupted, encrypted or non-Word file
+  failed silently with no UI feedback.
+- `node cli.mjs a.docx -o a.docx` silently overwrote the source file with its own conversion,
+  irreversibly. `-o` targeting the input path is now rejected with an error.
+- `package-lock.json` declared the root package `"license": "ISC"` while `package.json` says
+  `"GPL-3.0"`.
 
 ## [1.0.0] - 2026-08-16
 
@@ -53,5 +92,6 @@ Initial release.
 ### Known limitations
 See [README — Limitations](./README.md#limitations).
 
-[Unreleased]: https://github.com/OWNER/polytone/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/OWNER/polytone/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/OWNER/polytone/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/OWNER/polytone/releases/tag/v1.0.0

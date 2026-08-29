@@ -37,8 +37,8 @@ npm run build:web && npm test
 
 | Path                | Role                                                             |
 | ------------------- | ---------------------------------------------------------------- |
-| `engine.mjs`        | Conversion engine. All linguistic rules live here.                |
-| `cli.mjs`           | CLI wrapper: stdin/files/`.docx`/`--json`.                        |
+| `engine.mjs`        | Conversion engine. All linguistic rules, plus the shared `.docx` text codec. |
+| `cli.mjs`           | CLI wrapper: stdin/files/`--json`, and the zip shell for `.docx`.  |
 | `build_lexicon.mjs` | Expands hunspell `.dic` + `.aff` into `lexicon.json`.             |
 | `build_web.mjs`     | Copies engine + lexicon into `web/` as browser-loadable scripts.  |
 | `dict/`             | Upstream hunspell dictionary. Do not hand-edit — see below.       |
@@ -132,4 +132,15 @@ There is no CLA, and the project cannot accept one: the dictionary's copyright i
 The Polytonic Project, so no contributor and no maintainer can relicense the combined work.
 Contributions that would require relicensing cannot be merged.
 
-Do not paste code or word lists from proprietary or incompatibly licensed sources.
+Do not paste code or word lists from proprietary or incompatibly licensed sources. This
+includes decompiled or reverse-engineered code: artefacts derived from decompiling a
+proprietary third-party polytonic input tool (kept outside this repository, under
+`scratchpad/koronis/` — `koronis_rules.json`, `verify_rows.json`, `extract_rules.py`) carry no
+licence grant to anyone and must never be imported into this project, as data, as a fixture,
+or otherwise. Behaviour learned from studying such a tool may inform a change only when it is
+independently re-derived from a citable source (a grammar, the dictionary itself, or the
+Unicode Standard) and the commit says so.
+
+`web/jszip.min.js` is vendored, not installed via npm: JSZip 3.10.1, 97,630 bytes, SHA-256
+`acc7e41455a80765b5fd9c7ee1b8078a6d160bbbca455aeae854de65c947d59e`, dual MIT/GPLv3. Record any
+upgrade's new version, size and hash here.

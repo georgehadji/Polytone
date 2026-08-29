@@ -33,8 +33,8 @@ echo "ο ήλιος και η θάλασσα" | node cli.mjs
 
 - **Mixed input** — words already carrying polytonic diacritics are left untouched, so
   running Polytone twice changes nothing the second time.
-- **`.docx` in place** — converts `document.xml`, headers, footers, footnotes and endnotes,
-  leaving fonts, styles and structure intact.
+- **`.docx` in place** — converts `document.xml`, headers, footers, footnotes, endnotes and
+  comments, leaving fonts, styles and structure intact.
 - **Per-word confidence** — every token reports whether it was a dictionary hit, a heuristic
   guess, or ambiguous, so uncertain output can be routed to a human.
 - **Zero runtime dependencies** for text conversion; `adm-zip` is lazily imported and only
@@ -111,7 +111,9 @@ result.text;    // 'ὁ ἥλιος καὶ ἡ θάλασσα'
 result.tokens;  // [{ word, out, status, index }, ...]
 ```
 
-Also exported: `hasPolytonicMark(word)` and `isGreek(text)`.
+Also exported: `hasPolytonicMark(word)`, `isGreek(text)`, and the shared `.docx` text codec
+used by the CLI and the browser UI — `convertDocxXml(xml, lexicon)` and the `DOCX_PARTS`
+regular expression that names which archive entries are text-bearing.
 
 #### Token statuses
 
@@ -119,7 +121,7 @@ Also exported: `hasPolytonicMark(word)` and `isGreek(text)`.
 | ----------- | ----------------------------------------------------------------------- |
 | `ok`        | Dictionary hit, or a form that provably needs no change.                |
 | `skipped`   | Left as-is: all-caps (unaccented by convention), or already polytonic.  |
-| `guessed`   | Not in the dictionary; vowel-initial, so smooth breathing was assumed.  |
+| `guessed`   | Not in the dictionary; vowel-initial, so a breathing was assumed (rough for word-initial upsilon, smooth otherwise). |
 | `ambiguous` | Several polytonic forms exist and context did not settle the choice.    |
 | `unknown`   | Not in the dictionary and a circumflex may be required. Needs review.   |
 
@@ -140,8 +142,9 @@ Also exported: `hasPolytonicMark(word)` and `isGreek(text)`.
 4. **Post-pass** — grave accent (βαρεία) is applied to oxytone words that are not
    phrase-final, enclitic hosts receive the second accent required by έγκλιση τόνου, and
    γιατί / ποὺ / πὼς are resolved by looking at the surrounding sentence.
-5. **Unknown words** — vowel-initial words take a smooth breathing and are marked `guessed`;
-   consonant-initial words are returned unchanged, and marked `unknown` only when a
+5. **Unknown words** — vowel-initial words take a breathing and are marked `guessed`: rough
+   for word-initial upsilon (a rule with no real exception in Greek), smooth otherwise.
+   Consonant-initial words are returned unchanged, and marked `unknown` only when a
    circumflex was plausible.
 
 ---
@@ -161,6 +164,17 @@ These are known and documented, not open bugs.
   in capitals will not be converted.
 - **Dictionary coverage is the ceiling.** Proper nouns, technical vocabulary and neologisms
   are largely absent and fall through to the heuristics. Check `unknown` and `guessed`.
+- **Fonts, not `.docx` conversion.** Polytone emits correct Unicode; it does not change the
+  document's font. A `.docx` set in a font without Extended Greek coverage (Georgia, many UI
+  fonts) shows fallback glyphs or tofu in Word — restyle it in a polytonic-capable face
+  (Times New Roman, Palatino Linotype, Cambria all have full coverage).
+- **1.0.0 output with a spurious capital iota is not self-repairing.** A word converted by
+  1.0.0 that shows `ἨΙ…` instead of `ᾘ…` is not fixed by re-running 1.1.0+ on the same text:
+  the word already carries a polytonic mark, so it is `skipped`. Re-convert from the original
+  monotonic source instead.
+- **Older tools may use non-standard codepoints.** Text produced by some legacy polytonic
+  input tools uses a plain dot above (U+02D9) for ἄνω τελεία, or a spacing iota (U+1FBE)
+  where a subscript is meant. Polytone passes these through unchanged rather than repairing them.
 
 ---
 
@@ -189,14 +203,15 @@ npm run serve      # static server on :8321
 
 ```
 polytone/
-├── engine.mjs           # conversion engine — all linguistic rules
-├── cli.mjs              # CLI: stdin/files/.docx/--json
+├── engine.mjs           # conversion engine — all linguistic rules, plus the shared .docx text codec
+├── cli.mjs              # CLI: stdin/files/--json, and the zip shell for .docx
 ├── build_lexicon.mjs    # dict/ -> lexicon.json
-├── build_web.mjs        # engine + lexicon -> web/
+├── build_web.mjs        # engine + lexicon -> web/, copies LICENSE files alongside
 ├── test.mjs             # test suite (node:assert)
 ├── lexicon.json         # generated, 37 MB
 ├── dict/                # upstream hunspell dictionary + its license
-└── web/                 # browser UI; lexicon.js and engine.browser.js are generated
+└── web/                 # browser UI; lexicon.js, engine.browser.js and the copied
+                          # LICENSE.txt / dict-LICENSE.txt are generated
 ```
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) for how to change a rule versus a dictionary entry —
