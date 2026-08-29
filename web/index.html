@@ -69,20 +69,18 @@ function convert() {
   const t0 = performance.now();
   const r = window.Polytone.polytonize(src, window.LEXICON);
   lastText = r.text;
-  // markup: ξαναχτίζουμε με spans γύρω από σημαδεμένα tokens
-  let html = '';
-  let cursor = 0;
   const marked = r.tokens.filter((t) => t.status !== 'ok' && t.status !== 'skipped');
-  // απλή προσέγγιση: escape όλο το κείμενο, highlight με αναζήτηση λέξεων
-  html = esc(r.text);
-  const seen = new Set();
-  for (const t of marked) {
-    if (seen.has(t.out)) continue;
-    seen.add(t.out);
-    const re = new RegExp('(^|[^Ͱ-Ͽἀ-῿])(' + t.out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?=$|[^Ͱ-Ͽἀ-῿])', 'gu');
-    html = html.replace(re, `$1<span class="${t.status}" title="${t.status}">$2</span>`);
-  }
-  $('out').innerHTML = html;
+  // ponytail: ένα πέρασμα, χάρτης out->status. Χρωματίζεται ΚΑΘΕ εμφάνιση σημαδεμένης
+  // λέξης, όχι μόνο εκείνη που σημαδεύτηκε — ίδια συμπεριφορά με πρίν· ακριβής θέση
+  // θα απαιτούσε character offsets από τη μηχανή (αύξηση δημόσιου API). status είναι
+  // πάντα ένα από τα πέντε literals της μηχανής, οπότε η CSS-class/title interpolation
+  // παρακάτω μένει ασφαλής.
+  const st = new Map(marked.map((t) => [t.out, t.status]));
+  $('out').innerHTML = esc(r.text)
+    .replace(/[̀-ͯͰ-Ͽἀ-῿]+/gu, (w) => {
+      const s = st.get(w);
+      return s ? `<span class="${s}" title="${s}">${w}</span>` : w;
+    });
   const n = r.tokens.length;
   const bad = marked.length;
   $('status').textContent = `${n} λέξεις, ${bad} πρὸς ἔλεγχο, ${(performance.now() - t0).toFixed(0)}ms`;
