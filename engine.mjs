@@ -176,10 +176,13 @@ function matchCase(result, original) {
 // ---- Main ----
 // lexicon: { mono: poly | [poly, ...] }
 // returns { text, tokens: [{word, out, status}] } — status: ok|skipped|unknown|ambiguous|guessed
+// Το ίδιο σπάσιμο χρησιμοποιεί και ο μοιραστής του .docx — οι δύο δεν επιτρέπεται να αποκλίνουν.
+const WORD_SPLIT = /([\p{Script=Greek}̀-ͅ]+(?:,τι)?)/u;
+
 export function polytonize(text, lexicon) {
   const src = nfc(text);
   // tokens: ελληνικές λέξεις (γράμματα+marks, με ' για ό,τι δεν πιάνουμε) και ο,τιδήποτε άλλο
-  const parts = src.split(/([\p{Script=Greek}̀-ͅ]+(?:,τι)?)/u);
+  const parts = src.split(WORD_SPLIT);
   const report = [];
   const words = []; // indices στο parts που είναι ελληνικές λέξεις
 
@@ -367,8 +370,92 @@ function xmlDecode(s) {
 const xmlEncode = (s) =>
   s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
 
-// ponytail: μετατροπή ανά <w:t> run — λέξη κομμένη σε δύο runs δεν πολυτονίζεται (σπάνιο).
+// Ένα <w:t> δεν είναι λέξη. Το Word κόβει runs στη μέση λέξης (rsid, ορθογράφος,
+// αναδρομή αλλαγών), οπότε μετατροπή ανά <w:t> τονίζει τα κομμάτια σαν χωριστές λέξεις:
+// π|ας -> π|ἄς. Ενώνουμε λοιπόν όσα γειτονικά <w:t> χωρίζονται μόνο από όριο run,
+// μετατρέπουμε το ενιαίο κείμενο, και το ξαναμοιράζουμε στα ίδια <w:t>.
+const T_ELEMENT = /(<w:t(?:\s[^>]*)?>)([^<]*)(<\/w:t>)/g;
+
+// Whitelist, όχι blacklist: μόνο κλείσιμο+άνοιγμα run (με προαιρετικό rPr) κρατά το
+// κείμενο συνεχόμενο. Ο,τιδήποτε άλλο ανάμεσα — <w:br/>, <w:tab/>, όριο παραγράφου ή
+// κελιού, πεδίο, σύμβολο, σχόλιο, υποσημείωση — σπάει το chunk. Άγνωστο markup επίσης.
+const RUN_GAP =
+  /^(?:<\/w:r>\s*<w:r(?:\s[^>]*)?>\s*(?:<w:rPr\s*\/>|<w:rPr>[\s\S]*?<\/w:rPr>)?\s*)?$/;
+
+// Μοιράζει το μετατρεμμένο κείμενο πίσω στα αρχικά κομμάτια. Η polytonize δεν αλλάζει
+// ποτέ τα μη-ελληνικά parts ούτε συγχωνεύει parts, άρα το σπάσιμο εισόδου και εξόδου με
+// το WORD_SPLIT δίνει 1:1 αντιστοιχία. Λέξη που πατάει σε δύο κομμάτια πηγαίνει ολόκληρη
+// σε αυτό όπου ξεκινάει· τα υπόλοιπα κομμάτια κόβονται στα πραγματικά τους όρια.
+// ponytail: η μορφοποίηση του δεύτερου run χάνεται για εκείνη τη λέξη — ασήμαντο όταν τα
+// runs έχουν ίδιο rPr (352 από τα 358 σπασίματα σε πραγματικό βιβλίο), ορατό αλλιώς.
+function redistribute(texts, lexicon) {
+  const joined = texts.join('');
+  const inParts = joined.split(WORD_SPLIT);
+  const outParts = polytonize(joined, lexicon).text.split(WORD_SPLIT);
+  // Αμυντικό: αν κάποτε πάψει να ισχύει η αντιστοιχία, γύρνα στη μετατροπή ανά κομμάτι.
+  if (inParts.length !== outParts.length) {
+    return texts.map((t) => polytonize(t, lexicon).text);
+  }
+
+  const ends = [];
+  let acc = 0;
+  for (const t of texts) ends.push((acc += t.length));
+
+  const out = texts.map(() => '');
+  let seg = 0, pos = 0;
+  const seek = () => { while (seg < ends.length - 1 && pos >= ends[seg]) seg++; };
+
+  for (let i = 0; i < inParts.length; i++) {
+    if (i % 2 === 1) {          // ελληνική λέξη: αδιαίρετη
+      seek();
+      out[seg] += outParts[i];
+      pos += inParts[i].length;
+    } else {                     // ενδιάμεσο: αμετάβλητο, κόβεται στα όρια
+      let rest = inParts[i];
+      while (rest.length) {
+        seek();
+        const take = rest.slice(0, ends[seg] - pos);
+        out[seg] += take;
+        pos += take.length;
+        rest = rest.slice(take.length);
+      }
+    }
+  }
+  return out;
+}
+
 export function convertDocxXml(xml, lexicon) {
-  return xml.replace(/(<w:t(?:\s[^>]*)?>)([^<]*)(<\/w:t>)/g, (_, open, text, close) =>
-    open + xmlEncode(polytonize(xmlDecode(text), lexicon).text) + close);
+  const els = [];
+  const re = new RegExp(T_ELEMENT.source, 'g');
+  for (let m = re.exec(xml); m !== null; m = re.exec(xml)) {
+    els.push({ open: m[1], text: m[2], close: m[3], start: m.index, end: re.lastIndex });
+  }
+  if (!els.length) return xml;
+
+  const chunks = [[0]];
+  for (let i = 1; i < els.length; i++) {
+    if (RUN_GAP.test(xml.slice(els[i - 1].end, els[i].start))) chunks[chunks.length - 1].push(i);
+    else chunks.push([i]);
+  }
+
+  const texts = new Array(els.length);
+  for (const idxs of chunks) {
+    const decoded = idxs.map((i) => xmlDecode(els[i].text));
+    const converted = decoded.length === 1
+      ? [polytonize(decoded[0], lexicon).text]
+      : redistribute(decoded, lexicon);
+    idxs.forEach((i, k) => { texts[i] = converted[k]; });
+  }
+
+  let out = '', cut = 0;
+  for (const [i, e] of els.entries()) {
+    const text = xmlEncode(texts[i]);
+    // Το κείμενο μπορεί να μετακινήθηκε σε άλλο <w:t>· χωρίς xml:space το Word κόβει
+    // το κενό στις άκρες και κολλάει δύο λέξεις.
+    const open = (/^\s|\s$/.test(text) && !/\sxml:space\s*=/.test(e.open))
+      ? e.open.replace(/>$/, ' xml:space="preserve">') : e.open;
+    out += xml.slice(cut, e.start) + open + text + e.close;
+    cut = e.end;
+  }
+  return out + xml.slice(cut);
 }

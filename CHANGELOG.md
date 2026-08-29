@@ -17,6 +17,16 @@ upgrade — are **not** breaking changes and land in minor releases.
 
 ## [Unreleased]
 
+### Fixed
+- `.docx` conversion corrupted words that Word had split across two runs. Each `<w:t>` was
+  converted in isolation, so a fragment was accented as though it were a whole word:
+  `π`+`ας` became `π`+`ἄς`, ` α`+`νθρώπου` became ` ἅ`+`νθρώπου`. A 6,111-word book had 358 such
+  splits, 347 of them corrupted; 352 of the 358 were between runs with identical formatting,
+  i.e. pure Word revision noise. Adjacent `<w:t>` elements separated by nothing but a run
+  boundary are now joined before conversion and redistributed afterwards. A `<w:br/>`, tab,
+  paragraph or cell boundary, field or symbol still breaks the text, as it should.
+  Previous releases documented this as "not converted"; it was in fact mis-converted.
+
 ## [1.1.0] - 2026-08-29
 
 ### Added

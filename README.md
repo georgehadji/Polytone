@@ -156,8 +156,12 @@ These are known and documented, not open bugs.
 - **No part-of-speech tagger.** Clitic-vs-possessive decisions (μου, του, σου…) use position
   heuristics. Constructions that move the clitic away from its host — «χθὲς μοῦ ἔδωσε» —
   can be missed.
-- **`.docx` runs.** Conversion happens per `<w:t>` element. A word split across two runs by
-  a formatting change mid-word is not converted.
+- **`.docx` runs.** Word routinely splits a word across two runs. Polytone rejoins runs that
+  are separated by nothing but a run boundary, converts the whole word, and puts it back in
+  the run where it started — so a word split purely by Word's revision tracking converts
+  normally, but if the two runs were formatted differently the word takes the first run's
+  formatting throughout. A word split by a `<w:br/>`, a tab, a paragraph boundary or a field
+  is deliberately left alone rather than converted from a fragment.
 - **γιατί.** Interrogative vs. causal is decided from the sentence's terminal punctuation,
   which fails on questions written without a question mark.
 - **All-caps text.** Deliberately left unaccented, following standard practice. Headings set
