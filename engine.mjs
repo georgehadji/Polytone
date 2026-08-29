@@ -199,6 +199,7 @@ export function polytonize(text, lexicon) {
         const pos = accentPosition(prev);
         if (pos === 2 || (pos === 1 && nfd(prev).includes('͂'))) {
           parts[prevIdx] = addFinalOxia(prev);
+          report[wi - 1].out = parts[prevIdx]; // αλλιώς tokens[] ≠ text
         }
       } else if (override !== undefined) {
         out = matchCase(override, word);
