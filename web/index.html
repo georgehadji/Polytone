@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="el">
+<head>
+<meta charset="utf-8">
+<title>Polytone — Πολυτονιστής</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg: #faf8f4; --ink: #1a1a1a; --accent: #7c5c34; --border: #d8d2c6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 1.2rem; background: var(--bg); color: var(--ink);
+         font-family: Georgia, 'Times New Roman', serif; }
+  h1 { font-size: 1.3rem; margin: 0 0 .8rem; color: var(--accent); }
+  .cols { display: flex; gap: 1rem; flex-wrap: wrap; }
+  .col { flex: 1 1 320px; display: flex; flex-direction: column; gap: .5rem; }
+  textarea, .out { width: 100%; min-height: 340px; padding: .7rem; font-size: 1.05rem;
+    line-height: 1.7; border: 1px solid var(--border); border-radius: 6px;
+    background: #fff; font-family: inherit; }
+  .out { white-space: pre-wrap; overflow-y: auto; }
+  .out .unknown { background: #ffd9d9; }
+  .out .ambiguous { background: #ffe9c7; }
+  .out .guessed { background: #dde8ff; }
+  .bar { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+  button { padding: .45rem .9rem; font-size: .95rem; border: 1px solid var(--accent);
+    background: var(--accent); color: #fff; border-radius: 6px; cursor: pointer; }
+  button.ghost { background: transparent; color: var(--accent); }
+  .legend { font-size: .8rem; color: #666; }
+  .legend span { padding: 0 .35rem; border-radius: 3px; }
+  #status { font-size: .85rem; color: #666; }
+  .drop { border: 2px dashed var(--border); border-radius: 6px; padding: .5rem .8rem;
+    font-size: .85rem; color: #666; }
+  .drop.over { border-color: var(--accent); }
+</style>
+</head>
+<body>
+<h1>Polytone — μονοτονικὸ ➝ πολυτονικό</h1>
+<div class="cols">
+  <div class="col">
+    <div class="bar">
+      <label class="drop" id="drop">Σύρε ἐδῶ ἢ <input type="file" id="file" accept=".txt,.docx"> (.txt / .docx)</label>
+    </div>
+    <textarea id="in" placeholder="Ἐπικόλλησε μονοτονικὸ ἢ μικτὸ κείμενο…"></textarea>
+  </div>
+  <div class="col">
+    <div class="bar">
+      <button id="copy">Ἀντιγραφή</button>
+      <button id="save" class="ghost">Ἀποθήκευση .txt</button>
+      <span id="status"></span>
+    </div>
+    <div class="out" id="out"></div>
+    <div class="legend">
+      <span class="unknown">ἄγνωστη</span>
+      <span class="ambiguous">διφορούμενη</span>
+      <span class="guessed">εἰκασία πνεύματος</span>
+    </div>
+  </div>
+</div>
+
+<script src="lexicon.js"></script>
+<script src="engine.browser.js"></script>
+<script src="jszip.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+let lastText = '';
+
+function convert() {
+  const src = $('in').value;
+  if (!src.trim()) { $('out').innerHTML = ''; $('status').textContent = ''; return; }
+  const t0 = performance.now();
+  const r = window.Polytone.polytonize(src, window.LEXICON);
+  lastText = r.text;
+  // markup: ξαναχτίζουμε με spans γύρω από σημαδεμένα tokens
+  let html = '';
+  let cursor = 0;
+  const marked = r.tokens.filter((t) => t.status !== 'ok' && t.status !== 'skipped');
+  // απλή προσέγγιση: escape όλο το κείμενο, highlight με αναζήτηση λέξεων
+  html = esc(r.text);
+  const seen = new Set();
+  for (const t of marked) {
+    if (seen.has(t.out)) continue;
+    seen.add(t.out);
+    const re = new RegExp('(^|[^Ͱ-Ͽἀ-῿])(' + t.out.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + ')(?=$|[^Ͱ-Ͽἀ-῿])', 'gu');
+    html = html.replace(re, `$1<span class="${t.status}" title="${t.status}">$2</span>`);
+  }
+  $('out').innerHTML = html;
+  const n = r.tokens.length;
+  const bad = marked.length;
+  $('status').textContent = `${n} λέξεις, ${bad} πρὸς ἔλεγχο, ${(performance.now() - t0).toFixed(0)}ms`;
+}
+
+let timer;
+$('in').addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(convert, 300); });
+
+$('copy').onclick = () => navigator.clipboard.writeText(lastText)
+  .then(() => $('status').textContent = 'ἀντιγράφηκε ✓');
+
+$('save').onclick = () => {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([lastText], { type: 'text/plain;charset=utf-8' }));
+  a.download = 'polytonic.txt';
+  a.click();
+};
+
+// ---- Ἀρχεῖα ----
+async function handleFile(f) {
+  if (f.name.toLowerCase().endsWith('.docx')) {
+    const zip = await JSZip.loadAsync(f);
+    const targets = Object.keys(zip.files).filter((n) =>
+      /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(n));
+    for (const name of targets) {
+      const xml = await zip.file(name).async('string');
+      const converted = xml.replace(/(<w:t[^>]*>)([^<]*)(<\/w:t>)/g, (_, open, text, close) => {
+        const un = text.replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>');
+        const poly = window.Polytone.polytonize(un, window.LEXICON).text;
+        return open + poly.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;') + close;
+      });
+      zip.file(name, converted);
+    }
+    const blob = await zip.generateAsync({ type: 'blob',
+      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = f.name.replace(/\.docx$/i, '.poly.docx');
+    a.click();
+    $('status').textContent = `docx ἕτοιμο: ${a.download}`;
+  } else {
+    $('in').value = await f.text();
+    convert();
+  }
+}
+$('file').addEventListener('change', (e) => e.target.files[0] && handleFile(e.target.files[0]));
+const drop = $('drop');
+drop.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', (e) => {
+  e.preventDefault(); drop.classList.remove('over');
+  e.dataTransfer.files[0] && handleFile(e.dataTransfer.files[0]);
+});
+</script>
+</body>
+</html>

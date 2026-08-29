@@ -1,0 +1,21 @@
+{
+  "name": "polytone",
+  "version": "1.0.0",
+  "description": "Convert monotonic and mixed Greek text to polytonic. Offline, lexicon + rules.",
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "test": "node test.mjs",
+    "build": "node build_lexicon.mjs && node build_web.mjs",
+    "serve": "npx -y http-server web -p 8321"
+  },
+  "license": "GPL-3.0",
+  "type": "module",
+  "dependencies": {
+    "adm-zip": "^0.6.0"
+  },
+  "bin": {
+    "polytone": "./cli.mjs"
+  }
+}

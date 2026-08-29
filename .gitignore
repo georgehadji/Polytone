@@ -1,0 +1,7 @@
+node_modules/
+
+# Proprietary third-party trial installer (Koronis, © Tranoudakis Dimitrios, 2014).
+# No licence grant to redistribute — must never enter a commit. See KORONIS-PLAN.md §7.4
+# and CONTRIBUTING.md's licensing section.
+/koronis_trial/
+/koronis_trial.zip
