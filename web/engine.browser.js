@@ -1,3 +1,6 @@
+/* Polytone — GPL-3.0. Το λεξικό παράγεται από dict/el-polyton,
+   © Α. Δεληγιάννη / The Polytonic Project. Η αναφορά πρέπει να διατηρείται
+   σε κάθε αναδιανομή· βλ. web/LICENSE.txt και web/dict-LICENSE.txt. */
 // Polytone engine: monotonic/mixed Greek -> polytonic. Pure functions, no IO.
 // Works in Node and browser (ESM).
 
