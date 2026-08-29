@@ -92,6 +92,6 @@ Initial release.
 ### Known limitations
 See [README — Limitations](./README.md#limitations).
 
-[Unreleased]: https://github.com/OWNER/polytone/compare/v1.1.0...HEAD
-[1.1.0]: https://github.com/OWNER/polytone/compare/v1.0.0...v1.1.0
-[1.0.0]: https://github.com/OWNER/polytone/releases/tag/v1.0.0
+[Unreleased]: https://github.com/georgehadji/Polytone/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/georgehadji/Polytone/compare/v1.0.0...v1.1.0
+[1.0.0]: https://github.com/georgehadji/Polytone/releases/tag/v1.0.0

@@ -48,7 +48,7 @@ echo "ο ήλιος και η θάλασσα" | node cli.mjs
 Requires **Node.js 18+**.
 
 ```bash
-git clone <repo-url> polytone
+git clone https://github.com/georgehadji/Polytone.git polytone
 cd polytone
 npm install
 npm test

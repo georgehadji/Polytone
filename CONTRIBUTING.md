@@ -6,7 +6,7 @@ matter (rules and lexicon), and what a mergeable pull request looks like.
 ## Setup
 
 ```bash
-git clone <repo-url> polytone
+git clone https://github.com/georgehadji/Polytone.git polytone
 cd polytone
 npm install
 npm test
@@ -119,8 +119,10 @@ Run `node cli.mjs --json` and include the token statuses; a word reported as `gu
 ## Security
 
 Do not open a public issue for a security report. Polytone parses untrusted input — `.docx`
-archives in particular — so archive-extraction and XML-handling issues are in scope. Email the
-maintainer privately and allow reasonable time for a fix before disclosure.
+archives in particular — so archive-extraction and XML-handling issues are in scope.
+
+Report privately through GitHub's [private vulnerability reporting](https://github.com/georgehadji/Polytone/security/advisories/new)
+(Security → Report a vulnerability). Allow reasonable time for a fix before disclosure.
 
 ## Licensing of contributions
 
