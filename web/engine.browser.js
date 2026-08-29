@@ -1,7 +1,7 @@
 // Polytone engine: monotonic/mixed Greek -> polytonic. Pure functions, no IO.
 // Works in Node and browser (ESM).
 
-const OXIA = '́', VARIA = '̀', PSILI = '̓';
+const OXIA = '́', VARIA = '̀', PSILI = '̓', DASIA = '̔';
 const POLY_MARKS = /[̀̓̔͂ͅ]/; // βαρεία, ψιλή, δασεία, περισπωμένη, ὑπογεγραμμένη (NFD)
 const GREEK = /[Ͱ-Ͽἀ-῿]/;
 const VOWELS = 'αεηιουωΑΕΗΙΟΥΩ';
@@ -133,20 +133,24 @@ function startsWithVowel(word) {
   return first !== undefined && VOWELS.includes(first.toLowerCase());
 }
 
-// Ψιλή στο αρχικό φωνήεν (default για άγνωστες φωνηεντόληκτες, §7α)
-function addPsili(word) {
+// Πνεύμα στο αρκτικό φωνήεν (default για άγνωστες φωνηεντόληκτες, §7α)
+function addBreathing(word) {
   const w = nfd(word);
   const cl = vowelClusters(w);
   if (!cl.length || cl[0][0] !== 0) return word;
   let [s, e] = cl[0];
   const seg = w.slice(s, e);
-  // δίψηφο: ψιλή στο δεύτερο φωνήεν· αλλιώς στο πρώτο. Marks πάνε αμέσως μετά το γράμμα.
   const letters = [...seg].filter((c) => !/\p{M}/u.test(c));
+  // Αρκτικό ύψιλον παίρνει πάντα δασεία (κάθε γραμματική της αρχαίας· λ.χ. ὕδωρ, ὑπέρ, ὑγιής).
+  // Κριτήριο = το ΠΡΩΤΟ γράμμα της συστάδας, όχι η λέξη: αυ-/ευ-/ου- κρατούν ψιλή
+  // (letters[0] = α/ε/ο), υι- παίρνει δασεία στο ι.
+  const mark = letters[0].toLowerCase() === 'υ' ? DASIA : PSILI;
+  // δίψηφο: μάρκα στο δεύτερο φωνήεν· αλλιώς στο πρώτο. Marks πάνε αμέσως μετά το γράμμα.
   if (letters.length === 2) {
     const idx = seg.indexOf(letters[1]);
-    return nfc(seg.slice(0, idx + 1) + PSILI + seg.slice(idx + 1) + w.slice(e));
+    return nfc(seg.slice(0, idx + 1) + mark + seg.slice(idx + 1) + w.slice(e));
   }
-  return nfc(seg[0] + PSILI + seg.slice(1) + w.slice(e));
+  return nfc(seg[0] + mark + seg.slice(1) + w.slice(e));
 }
 
 // Επιλογή από πολλαπλούς υποψηφίους: προτίμα χωρίς ὑπογεγραμμένη (νεοελληνική χρήση)
@@ -159,7 +163,12 @@ function pickCandidate(cands) {
 function matchCase(result, original) {
   if (!result) return result;
   if (original[0] !== original[0].toLowerCase()) {
-    return nfc(result[0].toUpperCase() + result.slice(1));
+    // .toUpperCase() σε προσυντεθειμένο NFC γράμμα ΕΠΕΚΤΕΙΝΕΙ: 'ᾳ' -> 'ΑΙ', 'ᾁ' -> 'ἉΙ'.
+    // Κεφαλαιοποιούμε το ΒΑΣΙΚΟ γράμμα σε NFD και ξανασυνθέτουμε: 'ᾳ' -> 'ᾼ'.
+    // Όπου δεν υπάρχει προσυντεθειμένος τύπος (ῆ -> Η͂) μένει έγκυρη NFC ακολουθία —
+    // καμία μάρκα δεν πέφτει (αντίθετα από την πολιτική πληκτρολογίου).
+    const w = nfd(result);
+    return nfc(w[0].toUpperCase() + w.slice(1));
   }
   return result;
 }
@@ -199,6 +208,7 @@ function polytonize(text, lexicon) {
         const pos = accentPosition(prev);
         if (pos === 2 || (pos === 1 && nfd(prev).includes('͂'))) {
           parts[prevIdx] = addFinalOxia(prev);
+          report[wi - 1].out = parts[prevIdx]; // αλλιώς tokens[] ≠ text
         }
       } else if (override !== undefined) {
         out = matchCase(override, word);
@@ -208,7 +218,11 @@ function polytonize(text, lexicon) {
           if (nextI === undefined || !isBefore(parts, nextI, idx)) out = word;
         }
       } else {
-        const hit = lexicon[word] ?? lexicon[lower];
+        // own-property μόνο: lexicon['constructor'] ή ρυπασμένο Object.prototype
+        // δεν πρέπει να περάσει για λήμμα.
+        const raw = Object.hasOwn(lexicon, word) ? lexicon[word]
+          : Object.hasOwn(lexicon, lower) ? lexicon[lower] : undefined;
+        const hit = (typeof raw === 'string' || Array.isArray(raw)) ? raw : undefined;
         if (hit !== undefined) {
           if (Array.isArray(hit)) {
             const { pick, ambiguous } = pickCandidate(hit);
@@ -229,7 +243,7 @@ function polytonize(text, lexicon) {
               out = word;
             }
           } else if (startsWithVowel(word)) {
-            out = addPsili(word); // §7α: οι περισσότερες παίρνουν ψιλή
+            out = addBreathing(word); // §7α: οι περισσότερες παίρνουν ψιλή
             status = 'guessed';
           } else {
             // σύμφωνο-αρχική: ταυτότητα. Unknown μόνο αν θα μπορούσε να θέλει περισπωμένη
@@ -324,4 +338,39 @@ function circumflexPossible(word) {
   return false;
 }
 
-window.Polytone = { polytonize, hasPolytonicMark };
+// ---- .docx κειμενικά runs (καθαρή επεξεργασία string· το zip μένει στους callers) ----
+const DOCX_PARTS =
+  /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
+
+const XML_ENTITY = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" };
+// XML 1.0 Char production, χωρίς CR: το line-end normalisation θα το άλλαζε σε LF στο
+// επόμενο parse, οπότε το αφήνουμε κωδικοποιημένο.
+const isXmlChar = (cp) => cp === 0x9 || cp === 0xA
+  || (cp >= 0x20 && cp <= 0xD7FF) || (cp >= 0xE000 && cp <= 0xFFFD)
+  || (cp >= 0x10000 && cp <= 0x10FFFF);
+
+// Αποκωδικοποιεί τις 5 προκαθορισμένες οντότητες + αριθμητικές αναφορές — ό,τι εκπέμπει
+// το OOXML — και ξανακωδικοποιεί μόνο & < > (" και ' είναι νόμιμα σε XML text content).
+// ponytail: άγνωστη οντότητα (&nbsp; από χειρόγραφο DTD) ξαναδιαφεύγει ως &amp;nbsp;·
+// το ίδιο και μια αριθμητική αναφορά εκτός Char. Έγκυρο XML, όχι πιστό round-trip.
+function xmlDecode(s) {
+  return s.replace(/&(?:amp|lt|gt|quot|apos);|&#(?:[0-9]+|[xX][0-9A-Fa-f]+);/g, (m) => {
+    const named = XML_ENTITY[m];
+    if (named !== undefined) return named;
+    const body = m.slice(2, -1);
+    const cp = (body[0] === 'x' || body[0] === 'X')
+      ? parseInt(body.slice(1), 16) : parseInt(body, 10);
+    return isXmlChar(cp) ? String.fromCodePoint(cp) : m;
+  });
+}
+
+const xmlEncode = (s) =>
+  s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+// ponytail: μετατροπή ανά <w:t> run — λέξη κομμένη σε δύο runs δεν πολυτονίζεται (σπάνιο).
+function convertDocxXml(xml, lexicon) {
+  return xml.replace(/(<w:t(?:\s[^>]*)?>)([^<]*)(<\/w:t>)/g, (_, open, text, close) =>
+    open + xmlEncode(polytonize(xmlDecode(text), lexicon).text) + close);
+}
+
+window.Polytone = { polytonize, hasPolytonicMark, convertDocxXml, DOCX_PARTS };
