@@ -159,7 +159,12 @@ function pickCandidate(cands) {
 function matchCase(result, original) {
   if (!result) return result;
   if (original[0] !== original[0].toLowerCase()) {
-    return nfc(result[0].toUpperCase() + result.slice(1));
+    // .toUpperCase() σε προσυντεθειμένο NFC γράμμα ΕΠΕΚΤΕΙΝΕΙ: 'ᾳ' -> 'ΑΙ', 'ᾁ' -> 'ἉΙ'.
+    // Κεφαλαιοποιούμε το ΒΑΣΙΚΟ γράμμα σε NFD και ξανασυνθέτουμε: 'ᾳ' -> 'ᾼ'.
+    // Όπου δεν υπάρχει προσυντεθειμένος τύπος (ῆ -> Η͂) μένει έγκυρη NFC ακολουθία —
+    // καμία μάρκα δεν πέφτει (αντίθετα από την πολιτική πληκτρολογίου).
+    const w = nfd(result);
+    return nfc(w[0].toUpperCase() + w.slice(1));
   }
   return result;
 }
