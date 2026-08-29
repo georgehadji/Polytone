@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { execFileSync } from 'node:child_process';
 import { polytonize, hasPolytonicMark, convertDocxXml, DOCX_PARTS } from './engine.mjs';
 import assert from 'node:assert';
 
@@ -100,6 +101,20 @@ inv('docx: <w:tab/> δεν πιάνεται',
   convertDocxXml('<w:tab/>ουρανος</w:t>', lexicon) === '<w:tab/>ουρανος</w:t>');
 inv('DOCX_PARTS αγκυρωμένο', DOCX_PARTS.test('word/comments.xml')
   && !DOCX_PARTS.test('x/word/document.xml') && !DOCX_PARTS.test('word/document.xml.evil'));
+
+// ---- Bundle execution (αντικαθιστά byte-equality) ----
+const win = {};
+new Function('window', readFileSync(rel('web/engine.browser.js'), 'utf8'))(win);
+inv('bundle εκτελείται και εκθέτει το API — τρέξε: npm run build:web',
+  typeof win.Polytone?.polytonize === 'function' && typeof win.Polytone?.convertDocxXml === 'function');
+inv('bundle συμφωνεί με τη μηχανή',
+  win.Polytone.polytonize('ο ήλιος και η θάλασσα', lexicon).text === conv('ο ήλιος και η θάλασσα'));
+
+// ---- CLI smoke ----
+const cliOut = JSON.parse(execFileSync(process.execPath, [rel('cli.mjs'), '--json'],
+  { input: 'ο ήλιος', encoding: 'utf8' }));
+inv('CLI --json σχήμα + exit 0',
+  cliOut.text === 'ὁ ἥλιος' && ['text', 'unknown', 'ambiguous', 'guessed'].every((k) => k in cliOut));
 
 inv('χωρὶς legacy oxia στὴν ἔξοδο',
   !/[άέήίόύώΆΈΉΐΊΰΎΌΏ]/.test(once));
