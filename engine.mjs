@@ -1,7 +1,7 @@
 // Polytone engine: monotonic/mixed Greek -> polytonic. Pure functions, no IO.
 // Works in Node and browser (ESM).
 
-const OXIA = '́', VARIA = '̀', PSILI = '̓';
+const OXIA = '́', VARIA = '̀', PSILI = '̓', DASIA = '̔';
 const POLY_MARKS = /[̀̓̔͂ͅ]/; // βαρεία, ψιλή, δασεία, περισπωμένη, ὑπογεγραμμένη (NFD)
 const GREEK = /[Ͱ-Ͽἀ-῿]/;
 const VOWELS = 'αεηιουωΑΕΗΙΟΥΩ';
@@ -133,20 +133,24 @@ function startsWithVowel(word) {
   return first !== undefined && VOWELS.includes(first.toLowerCase());
 }
 
-// Ψιλή στο αρχικό φωνήεν (default για άγνωστες φωνηεντόληκτες, §7α)
-function addPsili(word) {
+// Πνεύμα στο αρκτικό φωνήεν (default για άγνωστες φωνηεντόληκτες, §7α)
+function addBreathing(word) {
   const w = nfd(word);
   const cl = vowelClusters(w);
   if (!cl.length || cl[0][0] !== 0) return word;
   let [s, e] = cl[0];
   const seg = w.slice(s, e);
-  // δίψηφο: ψιλή στο δεύτερο φωνήεν· αλλιώς στο πρώτο. Marks πάνε αμέσως μετά το γράμμα.
   const letters = [...seg].filter((c) => !/\p{M}/u.test(c));
+  // Αρκτικό ύψιλον παίρνει πάντα δασεία (κάθε γραμματική της αρχαίας· λ.χ. ὕδωρ, ὑπέρ, ὑγιής).
+  // Κριτήριο = το ΠΡΩΤΟ γράμμα της συστάδας, όχι η λέξη: αυ-/ευ-/ου- κρατούν ψιλή
+  // (letters[0] = α/ε/ο), υι- παίρνει δασεία στο ι.
+  const mark = letters[0].toLowerCase() === 'υ' ? DASIA : PSILI;
+  // δίψηφο: μάρκα στο δεύτερο φωνήεν· αλλιώς στο πρώτο. Marks πάνε αμέσως μετά το γράμμα.
   if (letters.length === 2) {
     const idx = seg.indexOf(letters[1]);
-    return nfc(seg.slice(0, idx + 1) + PSILI + seg.slice(idx + 1) + w.slice(e));
+    return nfc(seg.slice(0, idx + 1) + mark + seg.slice(idx + 1) + w.slice(e));
   }
-  return nfc(seg[0] + PSILI + seg.slice(1) + w.slice(e));
+  return nfc(seg[0] + mark + seg.slice(1) + w.slice(e));
 }
 
 // Επιλογή από πολλαπλούς υποψηφίους: προτίμα χωρίς ὑπογεγραμμένη (νεοελληνική χρήση)
@@ -235,7 +239,7 @@ export function polytonize(text, lexicon) {
               out = word;
             }
           } else if (startsWithVowel(word)) {
-            out = addPsili(word); // §7α: οι περισσότερες παίρνουν ψιλή
+            out = addBreathing(word); // §7α: οι περισσότερες παίρνουν ψιλή
             status = 'guessed';
           } else {
             // σύμφωνο-αρχική: ταυτότητα. Unknown μόνο αν θα μπορούσε να θέλει περισπωμένη
