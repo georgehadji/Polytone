@@ -7,8 +7,8 @@
 //   --json                          -> {text, unknown:[], ambiguous:[], guessed:[]} στο stdout
 import { readFileSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join, extname, basename } from 'node:path';
-import { polytonize } from './engine.mjs';
+import { dirname, join, extname, basename, resolve } from 'node:path';
+import { polytonize, convertDocxXml, DOCX_PARTS } from './engine.mjs';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const lexicon = JSON.parse(readFileSync(join(here, 'lexicon.json'), 'utf8'));
@@ -31,25 +31,31 @@ function convertText(text) {
   });
 }
 
-const XML_TARGETS = /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/;
+// ponytail: όρια πολιτικής για untrusted .docx. Η adm-zip ήδη φράζει το inflate στο
+// δηλωμένο μέγεθος (CVE-2026-39244)· αυτό κατεβάζει το ταβάνι από uint32 σε 64 MiB
+// ανά part και 256 MiB συνολικά (το DOCX_PARTS δέχεται headerN/footerN χωρίς όριο).
+const MAX_PART_BYTES = 64 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 256 * 1024 * 1024;
 
 function convertDocx(path, out) {
   // lazy import: μόνο όταν χρειάζεται docx
   return import('adm-zip').then(({ default: AdmZip }) => {
     const zip = new AdmZip(path);
+    let budget = MAX_TOTAL_BYTES;
     for (const entry of zip.getEntries()) {
-      if (!XML_TARGETS.test(entry.entryName)) continue;
+      if (!DOCX_PARTS.test(entry.entryName)) continue;
+      budget -= entry.header.size;
+      if (entry.header.size > MAX_PART_BYTES || budget < 0) {
+        throw new Error(`${entry.entryName}: υπερβαίνει το όριο μεγέθους`);
+      }
       const xml = entry.getData().toString('utf8');
-      // ponytail: μετατροπή ανά <w:t> run — λέξη κομμένη σε δύο runs δεν πολυτονίζεται (σπάνιο)
-      const converted = xml.replace(/(<w:t[^>]*>)([^<]*)(<\/w:t>)/g, (_, open, text, close) => {
-        const unescaped = text.replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>');
-        const poly = polytonize(unescaped, lexicon).text;
-        const escaped = poly.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
-        return open + escaped + close;
-      });
-      zip.updateFile(entry.entryName, Buffer.from(converted, 'utf8'));
+      zip.updateFile(entry.entryName, Buffer.from(convertDocxXml(xml, lexicon), 'utf8'));
     }
     const target = out ?? path.replace(/\.docx$/i, '.poly.docx');
+    // -o πάνω στο ίδιο αρχείο θα έσβηνε ανεπίστρεπτα το πρωτότυπο.
+    if (resolve(target) === resolve(path)) {
+      throw new Error('το -o δείχνει στο ίδιο αρχείο· δώσε άλλη διαδρομή');
+    }
     zip.writeZip(target);
     console.error(`γράφτηκε: ${target}`);
   });

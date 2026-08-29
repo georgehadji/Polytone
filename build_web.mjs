@@ -8,6 +8,6 @@ writeFileSync('web/lexicon.js', 'window.LEXICON=' + lexicon + ';');
 
 const engine = readFileSync('engine.mjs', 'utf8').replace(/^export /gm, '');
 writeFileSync('web/engine.browser.js',
-  engine + '\nwindow.Polytone = { polytonize, hasPolytonicMark };\n');
+  engine + '\nwindow.Polytone = { polytonize, hasPolytonicMark, convertDocxXml, DOCX_PARTS };\n');
 
 console.log('web/lexicon.js + web/engine.browser.js έτοιμα');

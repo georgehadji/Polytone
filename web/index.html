@@ -103,29 +103,28 @@ $('save').onclick = () => {
 
 // ---- Ἀρχεῖα ----
 async function handleFile(f) {
-  if (f.name.toLowerCase().endsWith('.docx')) {
-    const zip = await JSZip.loadAsync(f);
-    const targets = Object.keys(zip.files).filter((n) =>
-      /^word\/(document|header\d*|footer\d*|footnotes|endnotes)\.xml$/.test(n));
-    for (const name of targets) {
-      const xml = await zip.file(name).async('string');
-      const converted = xml.replace(/(<w:t[^>]*>)([^<]*)(<\/w:t>)/g, (_, open, text, close) => {
-        const un = text.replaceAll('&amp;', '&').replaceAll('&lt;', '<').replaceAll('&gt;', '>');
-        const poly = window.Polytone.polytonize(un, window.LEXICON).text;
-        return open + poly.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;') + close;
-      });
-      zip.file(name, converted);
+  try {
+    if (f.name.toLowerCase().endsWith('.docx')) {
+      const zip = await JSZip.loadAsync(f);
+      for (const name of Object.keys(zip.files).filter((n) => window.Polytone.DOCX_PARTS.test(n))) {
+        const xml = await zip.file(name).async('string');
+        // ponytail: όριο ΜΕΤΑ την αποσυμπίεση — φράζει την έξοδο, όχι τη μνήμη της JSZip.
+        if (xml.length > 64e6) throw new Error(`${name}: υπερβαίνει το όριο μεγέθους`);
+        zip.file(name, window.Polytone.convertDocxXml(xml, window.LEXICON));
+      }
+      const blob = await zip.generateAsync({ type: 'blob',
+        mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = f.name.replace(/\.docx$/i, '.poly.docx');
+      a.click();
+      $('status').textContent = `docx ἕτοιμο: ${a.download}`;
+    } else {
+      $('in').value = await f.text();
+      convert();
     }
-    const blob = await zip.generateAsync({ type: 'blob',
-      mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = f.name.replace(/\.docx$/i, '.poly.docx');
-    a.click();
-    $('status').textContent = `docx ἕτοιμο: ${a.download}`;
-  } else {
-    $('in').value = await f.text();
-    convert();
+  } catch (e) {
+    $('status').textContent = 'σφάλμα ἀρχείου: ' + (e?.message ?? e);
   }
 }
 $('file').addEventListener('change', (e) => e.target.files[0] && handleFile(e.target.files[0]));

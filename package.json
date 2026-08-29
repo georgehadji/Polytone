@@ -8,6 +8,7 @@
   "scripts": {
     "test": "node test.mjs",
     "build": "node build_lexicon.mjs && node build_web.mjs",
+    "build:web": "node build_web.mjs",
     "serve": "npx -y http-server web -p 8321"
   },
   "license": "GPL-3.0",

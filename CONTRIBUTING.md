@@ -23,6 +23,16 @@ npm run build     # dict/ -> lexicon.json, then web/lexicon.js + web/engine.brow
 
 The build takes a few minutes and needs roughly 2 GB of free RAM.
 
+If you only changed `engine.mjs`, you do not need the full build — regenerate the browser
+bundle and re-run the suite:
+
+```bash
+npm run build:web && npm test
+```
+
+`test.mjs` executes the committed `web/engine.browser.js` and checks it agrees with
+`engine.mjs`; editing the engine without regenerating the bundle first gives a red suite.
+
 ## Project layout
 
 | Path                | Role                                                             |

@@ -218,7 +218,11 @@ export function polytonize(text, lexicon) {
           if (nextI === undefined || !isBefore(parts, nextI, idx)) out = word;
         }
       } else {
-        const hit = lexicon[word] ?? lexicon[lower];
+        // own-property μόνο: lexicon['constructor'] ή ρυπασμένο Object.prototype
+        // δεν πρέπει να περάσει για λήμμα.
+        const raw = Object.hasOwn(lexicon, word) ? lexicon[word]
+          : Object.hasOwn(lexicon, lower) ? lexicon[lower] : undefined;
+        const hit = (typeof raw === 'string' || Array.isArray(raw)) ? raw : undefined;
         if (hit !== undefined) {
           if (Array.isArray(hit)) {
             const { pick, ambiguous } = pickCandidate(hit);
@@ -332,4 +336,39 @@ function circumflexPossible(word) {
     if (/[ηω]/.test(letters) || letters.length >= 2) return true; // μακρό ή δίφθογγος
   }
   return false;
+}
+
+// ---- .docx κειμενικά runs (καθαρή επεξεργασία string· το zip μένει στους callers) ----
+export const DOCX_PARTS =
+  /^word\/(document|header\d*|footer\d*|footnotes|endnotes|comments)\.xml$/;
+
+const XML_ENTITY = { '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&apos;': "'" };
+// XML 1.0 Char production, χωρίς CR: το line-end normalisation θα το άλλαζε σε LF στο
+// επόμενο parse, οπότε το αφήνουμε κωδικοποιημένο.
+const isXmlChar = (cp) => cp === 0x9 || cp === 0xA
+  || (cp >= 0x20 && cp <= 0xD7FF) || (cp >= 0xE000 && cp <= 0xFFFD)
+  || (cp >= 0x10000 && cp <= 0x10FFFF);
+
+// Αποκωδικοποιεί τις 5 προκαθορισμένες οντότητες + αριθμητικές αναφορές — ό,τι εκπέμπει
+// το OOXML — και ξανακωδικοποιεί μόνο & < > (" και ' είναι νόμιμα σε XML text content).
+// ponytail: άγνωστη οντότητα (&nbsp; από χειρόγραφο DTD) ξαναδιαφεύγει ως &amp;nbsp;·
+// το ίδιο και μια αριθμητική αναφορά εκτός Char. Έγκυρο XML, όχι πιστό round-trip.
+function xmlDecode(s) {
+  return s.replace(/&(?:amp|lt|gt|quot|apos);|&#(?:[0-9]+|[xX][0-9A-Fa-f]+);/g, (m) => {
+    const named = XML_ENTITY[m];
+    if (named !== undefined) return named;
+    const body = m.slice(2, -1);
+    const cp = (body[0] === 'x' || body[0] === 'X')
+      ? parseInt(body.slice(1), 16) : parseInt(body, 10);
+    return isXmlChar(cp) ? String.fromCodePoint(cp) : m;
+  });
+}
+
+const xmlEncode = (s) =>
+  s.replaceAll('&', '&amp;').replaceAll('<', '&lt;').replaceAll('>', '&gt;');
+
+// ponytail: μετατροπή ανά <w:t> run — λέξη κομμένη σε δύο runs δεν πολυτονίζεται (σπάνιο).
+export function convertDocxXml(xml, lexicon) {
+  return xml.replace(/(<w:t(?:\s[^>]*)?>)([^<]*)(<\/w:t>)/g, (_, open, text, close) =>
+    open + xmlEncode(polytonize(xmlDecode(text), lexicon).text) + close);
 }
