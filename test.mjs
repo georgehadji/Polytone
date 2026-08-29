@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { polytonize, hasPolytonicMark } from './engine.mjs';
+import { polytonize, hasPolytonicMark, convertDocxXml, DOCX_PARTS } from './engine.mjs';
 import assert from 'node:assert';
 
 const rel = (p) => join(dirname(fileURLToPath(import.meta.url)), p);
@@ -84,6 +84,22 @@ for (const [lo, hi] of [[0x0370, 0x03FF], [0x1F00, 0x1FFF]]) {
   }
 }
 inv(`reverse sweep (${swept} χαρακτῆρες)`, sweepBad === 0);
+
+// ---- .docx codec ----
+const dx = convertDocxXml('<w:t>Ο &quot;λόγος&quot; &amp; το &#8217; και &lt;tag&gt;</w:t>', lexicon);
+inv('docx: καμία διπλή διαφυγή', !dx.includes('&amp;quot;') && !dx.includes('&amp;#8217'));
+inv('docx: ιδιοδυναμία', convertDocxXml(dx, lexicon) === dx);
+inv('docx: το markup μένει άθικτο', dx.startsWith('<w:t>') && dx.endsWith('</w:t>'));
+
+const dxBad = convertDocxXml('<w:t>a&#0;b &#xD800; &#13; ο</w:t>', lexicon);
+inv('docx: κανένας παράνομος XML χαρακτήρας', ![...dxBad].some((c) => {
+  const cp = c.codePointAt(0);
+  return (cp < 0x20 && cp !== 0x9 && cp !== 0xA) || (cp >= 0xD800 && cp <= 0xDFFF);
+}));
+inv('docx: <w:tab/> δεν πιάνεται',
+  convertDocxXml('<w:tab/>ουρανος</w:t>', lexicon) === '<w:tab/>ουρανος</w:t>');
+inv('DOCX_PARTS αγκυρωμένο', DOCX_PARTS.test('word/comments.xml')
+  && !DOCX_PARTS.test('x/word/document.xml') && !DOCX_PARTS.test('word/document.xml.evil'));
 
 inv('χωρὶς legacy oxia στὴν ἔξοδο',
   !/[άέήίόύώΆΈΉΐΊΰΎΌΏ]/.test(once));
