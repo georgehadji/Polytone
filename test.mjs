@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 import { polytonize, hasPolytonicMark } from './engine.mjs';
 import assert from 'node:assert';
 
-const lexicon = JSON.parse(readFileSync('lexicon.json', 'utf8'));
+const rel = (p) => join(dirname(fileURLToPath(import.meta.url)), p);
+const lexicon = JSON.parse(readFileSync(rel('lexicon.json'), 'utf8'));
 const conv = (s) => polytonize(s, lexicon).text;
 
 const cases = [
@@ -34,6 +37,21 @@ for (const [input, expected] of cases) {
   else { fail++; console.log(`FAIL: "${input}"\n  θέλω: "${expected}"\n  πήρα: "${got}"`); }
 }
 console.log(`${pass}/${cases.length} pass`);
+
+// ---- Invariants ----
+const inv = (name, ok) => { if (ok) pass++; else { fail++; console.log(`FAIL invariant: ${name}`); } };
+
+const smp = 'Ο οὐρανός εἶναι ψηλά καὶ ὁ δάσκαλος μου λέει γιατί. Πρώτον· δεύτερον.';
+const R = polytonize(smp, lexicon), once = R.text;
+
+inv('ἰδιοδυναμία', conv(once) === once);
+inv('NFC στὴν ἔξοδο', once === once.normalize('NFC'));
+inv('NFD input == NFC input', conv(smp.normalize('NFD')) === once);
+inv('tokens ⊂ text', R.tokens.every((t) => once.includes(t.out)));
+const s6 = polytonize('ο δάσκαλος μου', lexicon);
+inv('tokens ⊂ text (ἔγκλιση)', s6.tokens.every((t) => s6.text.includes(t.out)));
+inv('χωρὶς legacy oxia στὴν ἔξοδο',
+  !/[άέήίόύώΆΈΉΐΊΰΎΌΏ]/.test(once));
 
 // γενικό smoke: μεγάλο δείγμα από lexicon δεν σκάει
 const sample = 'Η δημοκρατία είναι το πολίτευμα στο οποίο η εξουσία πηγάζει από τον λαό.';
