@@ -102,6 +102,25 @@ inv('docx: <w:tab/> δεν πιάνεται',
 inv('DOCX_PARTS αγκυρωμένο', DOCX_PARTS.test('word/comments.xml')
   && !DOCX_PARTS.test('x/word/document.xml') && !DOCX_PARTS.test('word/document.xml.evil'));
 
+// Το Word κόβει runs στη μέση λέξης (rsid, ορθογράφος). Μετατροπή ανά <w:t> τόνιζε
+// τα κομμάτια σαν χωριστές λέξεις: π|ας -> π|ἄς. Πραγματικό .docx: 358 τέτοια σπασίματα.
+const SPLIT = '<w:p><w:r><w:rPr><w:b/></w:rPr><w:t>π</w:t></w:r>'
+  + '<w:r><w:rPr><w:b/></w:rPr><w:t>ας</w:t></w:r></w:p>';
+const splitOut = convertDocxXml(SPLIT, lexicon);
+const tText = (x) => [...x.matchAll(/<w:t(?:\s[^>]*)?>([^<]*)<\/w:t>/g)].map((m) => m[1]).join('');
+inv('docx: λέξη σπασμένη σε δύο runs ενώνεται',
+  tText(splitOut) === 'πᾶς');
+inv('docx: κανένα κομμάτι δεν τονίζεται μόνο του',
+  !splitOut.includes('ἄς'));
+inv('docx: ιδιοδυναμία στο σπασμένο run', convertDocxXml(splitOut, lexicon) === splitOut);
+
+// Ό,τι δεν είναι όριο run σπάει το chunk: το κείμενο δεν είναι συνεχόμενο.
+for (const [name, sep] of [['<w:br/>', '<w:br/>'], ['<w:tab/>', '<w:tab/>'],
+  ['όριο παραγράφου', '</w:p><w:p>'], ['σύμβολο', '<w:sym w:font="Wingdings" w:char="F0E0"/>']]) {
+  const xml = '<w:p><w:r><w:t>π</w:t></w:r>' + sep + '<w:r><w:t>ας</w:t></w:r></w:p>';
+  inv(`docx: ${name} σπάει το chunk`, tText(convertDocxXml(xml, lexicon)) !== 'πᾶς');
+}
+
 // ---- Bundle execution (αντικαθιστά byte-equality) ----
 const win = {};
 new Function('window', readFileSync(rel('web/engine.browser.js'), 'utf8'))(win);
